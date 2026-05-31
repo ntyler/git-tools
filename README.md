@@ -75,6 +75,31 @@ The script runs `git diff --staged` in your current working directory, sends the
 staged diff to OpenAI, prints a conventional commit style message, and copies the
 result to your clipboard when `pyperclip` is available.
 
+To stage all current changes before generating the message:
+
+```powershell
+python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all
+```
+
+To generate the message and create a Git commit using the generated Summary and
+Description:
+
+```powershell
+python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all --commit
+```
+
+The commit command asks for confirmation before creating the commit. After a
+successful commit, it also asks whether you want to push the commit to the
+configured remote.
+
+To skip the commit confirmation prompt:
+
+```powershell
+python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all --commit --yes
+```
+
+The push prompt still asks before running `git push`.
+
 ## Other Tools
 
 Generate a starter pull request title and description:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -35,6 +36,29 @@ def run_git_command(args: list[str]) -> str:
         sys.exit(1)
 
     return result.stdout
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Create the command-line options for the script."""
+    parser = argparse.ArgumentParser(
+        description="Generate a commit message from the current Git repository."
+    )
+    parser.add_argument(
+        "--stage-all",
+        action="store_true",
+        help="Run git add -A before generating the commit message.",
+    )
+    parser.add_argument(
+        "--commit",
+        action="store_true",
+        help="Create a Git commit using the generated Summary and Description.",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the confirmation prompt when used with --commit.",
+    )
+    return parser
 
 
 def configure_openai_api_key() -> bool:
@@ -105,6 +129,103 @@ def generate_commit_message(diff: str) -> str:
     return (response.choices[0].message.content or "").strip()
 
 
+def parse_commit_output(output: str) -> tuple[str, str]:
+    """Extract Summary and Description sections from the generated output."""
+    summary_lines: list[str] = []
+    description_lines: list[str] = []
+    active_section: str | None = None
+
+    for raw_line in output.splitlines():
+        line = raw_line.rstrip()
+        normalized = line.strip().lower()
+
+        if normalized.startswith("summary:"):
+            active_section = "summary"
+            inline_value = line.split(":", 1)[1].strip()
+            if inline_value:
+                summary_lines.append(inline_value)
+            continue
+
+        if normalized.startswith("description:"):
+            active_section = "description"
+            inline_value = line.split(":", 1)[1].strip()
+            if inline_value:
+                description_lines.append(inline_value)
+            continue
+
+        if active_section == "summary" and line.strip():
+            summary_lines.append(line.strip())
+        elif active_section == "description":
+            description_lines.append(line)
+
+    summary = " ".join(summary_lines).strip()
+    description = "\n".join(description_lines).strip()
+
+    if not summary:
+        raise RuntimeError("Could not find a Summary section in the generated output.")
+
+    if not description:
+        raise RuntimeError("Could not find a Description section in the generated output.")
+
+    return summary, description
+
+
+def confirm_commit(summary: str, description: str) -> bool:
+    """Ask before creating a commit unless the user passed --yes."""
+    print("\nCommit to create:")
+    print(f"\nSummary:\n{summary}")
+    print(f"\nDescription:\n{description}")
+    answer = input("\nCreate this commit? [y/N]: ").strip().lower()
+    return answer in {"y", "yes"}
+
+
+def create_commit(summary: str, description: str) -> None:
+    """Create the Git commit using Summary as subject and Description as body."""
+    run_git_command(["commit", "-m", summary, "-m", description])
+    print("\nCreated Git commit with the generated message.")
+
+
+def confirm_push() -> bool:
+    """Ask whether to push after a successful commit."""
+    answer = input("\nPush this commit to the remote? [y/N]: ").strip().lower()
+    return answer in {"y", "yes"}
+
+
+def push_changes() -> bool:
+    """Push the current branch to its configured remote."""
+    try:
+        result = subprocess.run(
+            ["git", "push"],
+            cwd=Path.cwd(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError:
+        print("Git was not found. Install Git and make sure it is on your PATH.")
+        return False
+
+    stdout = result.stdout.strip()
+    stderr = result.stderr.strip()
+
+    if stdout:
+        print(stdout)
+
+    if result.returncode != 0:
+        print("\nCommit was created, but git push failed.")
+        if stderr:
+            print(stderr)
+        return False
+
+    if stderr:
+        print(stderr)
+
+    print("\nPushed committed changes.")
+    return True
+
+
 def copy_to_clipboard(text: str) -> None:
     """Copy text to the clipboard when pyperclip is installed and working."""
     try:
@@ -117,6 +238,12 @@ def copy_to_clipboard(text: str) -> None:
 
 
 def main() -> int:
+    args = build_parser().parse_args()
+
+    if args.stage_all:
+        run_git_command(["add", "-A"])
+        print("Staged all changes with git add -A.")
+
     staged_diff = run_git_command(["diff", "--staged"]).strip()
 
     if not staged_diff:
@@ -141,6 +268,21 @@ def main() -> int:
 
     print(output)
     copy_to_clipboard(output)
+
+    if args.commit:
+        try:
+            summary, description = parse_commit_output(output)
+        except RuntimeError as error:
+            print(error)
+            return 1
+
+        if args.yes or confirm_commit(summary, description):
+            create_commit(summary, description)
+            if confirm_push() and not push_changes():
+                return 1
+        else:
+            print("\nCommit canceled. Your changes are still staged.")
+
     return 0
 
 
