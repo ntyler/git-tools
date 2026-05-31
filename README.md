@@ -7,6 +7,16 @@ and workflow automation.
 This repo is designed to live in one place, such as `D:\GitHub\git-tools`, while
 the scripts are run from any other Git repository you are working in.
 
+## Why This Exists
+
+I built this as a lightweight, reusable alternative to editor-specific paid AI
+Git helpers. The goal is to keep common Git workflow automation local,
+transparent, and portable while using my own OpenAI API key.
+
+The first tool in this repo generates conventional commit messages from staged
+changes. It can also stage files, create the commit with the generated summary
+and description, and optionally push the committed changes.
+
 ## Install
 
 From this repository:
