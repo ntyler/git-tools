@@ -54,9 +54,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create a Git commit using the generated Summary and Description.",
     )
     parser.add_argument(
+        "--create-commit",
+        choices=["ask", "yes", "no"],
+        default="ask",
+        help=(
+            "When used with --commit, choose whether to create the commit: "
+            "ask, yes, or no."
+        ),
+    )
+    parser.add_argument(
+        "--push-committed-changes",
+        choices=["ask", "yes", "no"],
+        default="ask",
+        help=(
+            "After a commit is created, choose whether to run git push: "
+            "ask, yes, or no."
+        ),
+    )
+    parser.add_argument(
         "--yes",
         action="store_true",
-        help="Skip the confirmation prompt when used with --commit.",
+        help="Shortcut for --create-commit yes when used with --commit.",
     )
     return parser
 
@@ -191,6 +209,35 @@ def confirm_push() -> bool:
     return answer in {"y", "yes"}
 
 
+def should_create_commit(
+    args: argparse.Namespace,
+    summary: str,
+    description: str,
+) -> bool:
+    """Choose whether to create the commit from flags or an interactive prompt."""
+    if args.yes:
+        return True
+
+    if args.create_commit == "yes":
+        return True
+
+    if args.create_commit == "no":
+        return False
+
+    return confirm_commit(summary, description)
+
+
+def should_push_committed_changes(args: argparse.Namespace) -> bool:
+    """Choose whether to push from flags or an interactive prompt."""
+    if args.push_committed_changes == "yes":
+        return True
+
+    if args.push_committed_changes == "no":
+        return False
+
+    return confirm_push()
+
+
 def push_changes() -> bool:
     """Push the current branch to its configured remote."""
     try:
@@ -276,9 +323,9 @@ def main() -> int:
             print(error)
             return 1
 
-        if args.yes or confirm_commit(summary, description):
+        if should_create_commit(args, summary, description):
             create_commit(summary, description)
-            if confirm_push() and not push_changes():
+            if should_push_committed_changes(args) and not push_changes():
                 return 1
         else:
             print("\nCommit canceled. Your changes are still staged.")

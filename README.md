@@ -92,13 +92,35 @@ The commit command asks for confirmation before creating the commit. After a
 successful commit, it also asks whether you want to push the commit to the
 configured remote.
 
-To skip the commit confirmation prompt:
+To answer those prompts with optional input parameters:
+
+```powershell
+python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all --commit --create-commit yes --push-committed-changes yes
+```
+
+Available values are `ask`, `yes`, and `no`.
+
+Create the commit, but do not push:
+
+```powershell
+python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all --commit --create-commit yes --push-committed-changes no
+```
+
+Ask whether to create the commit, then automatically push if a commit is created:
+
+```powershell
+python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all --commit --create-commit ask --push-committed-changes yes
+```
+
+To skip the commit confirmation prompt, `--yes` is still supported as a shortcut
+for `--create-commit yes`:
 
 ```powershell
 python D:\GitHub\git-tools\git\generate_commit_message.py --stage-all --commit --yes
 ```
 
-The push prompt still asks before running `git push`.
+When using `--yes`, the push prompt still asks before running `git push` unless
+you also pass `--push-committed-changes yes` or `--push-committed-changes no`.
 
 ## Other Tools
 
