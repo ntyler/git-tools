@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 
 # C extensions
@@ -129,6 +130,7 @@ celerybeat.pid
 
 # Environments
 .env
+.venv/
 .venv
 env/
 venv/
@@ -172,6 +174,14 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# git-tools temporary files
+commit_diff.txt
+*.tmp
+*.temp
+*.out
+tmp/
+temp/
 
 # Cursor  
 #  Cursor is an AI-powered code editor.`.cursorignore` specifies files/directories to 
