@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from diff_context import DiffContext, build_staged_diff_context
+
 
 DEFAULT_MODEL = "gpt-4o-mini"
 LOCAL_API_KEY_ENV = "OPENAI_API_KEY_git_tools_local"
@@ -113,7 +115,7 @@ def load_prompt() -> str:
     )
 
 
-def generate_commit_message(diff: str) -> str:
+def generate_commit_message(diff_context: str) -> str:
     """Send the staged diff to OpenAI and return the generated commit text."""
     try:
         from openai import OpenAI, OpenAIError
@@ -130,13 +132,14 @@ def generate_commit_message(diff: str) -> str:
         response = client.chat.completions.create(
             model=model,
             temperature=0.2,
+            max_tokens=500,
             messages=[
                 {"role": "system", "content": prompt},
                 {
                     "role": "user",
                     "content": (
-                        "Create a commit message for this staged diff:\n\n"
-                        f"```diff\n{diff}\n```"
+                        "Create a commit message for these staged changes:\n\n"
+                        f"{diff_context}"
                     ),
                 },
             ],
@@ -284,6 +287,18 @@ def copy_to_clipboard(text: str) -> None:
         print("\nCould not copy to clipboard, but the output is printed above.")
 
 
+def print_diff_context_notice(context: DiffContext) -> None:
+    """Explain when local truncation prevented an oversized API request."""
+    if not context.truncated:
+        return
+
+    print(
+        "\nShortened staged diff context before calling OpenAI "
+        f"({context.original_diff_chars:,} diff chars -> "
+        f"{context.context_chars:,} prompt chars)."
+    )
+
+
 def main() -> int:
     args = build_parser().parse_args()
 
@@ -300,8 +315,15 @@ def main() -> int:
     if not configure_openai_api_key():
         return 1
 
+    diff_context = build_staged_diff_context(
+        diff=staged_diff,
+        name_status=run_git_command(["diff", "--staged", "--name-status"]).strip(),
+        stat=run_git_command(["diff", "--staged", "--stat"]).strip(),
+    )
+    print_diff_context_notice(diff_context)
+
     try:
-        output = generate_commit_message(staged_diff)
+        output = generate_commit_message(diff_context.text)
     except RuntimeError as error:
         print(error)
         return 1

@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from diff_context import build_staged_diff_context
+
 
 DEFAULT_MODEL = "gpt-4o-mini"
 LOCAL_API_KEY_ENV = "OPENAI_API_KEY_git_tools_local"
@@ -56,7 +58,7 @@ def configure_openai_api_key() -> bool:
     return False
 
 
-def summarize_diff(name_status: str, diff: str) -> str:
+def summarize_diff(diff_context: str) -> str:
     """Ask OpenAI for a practical summary of staged changes."""
     try:
         from openai import OpenAI, OpenAIError
@@ -72,6 +74,7 @@ def summarize_diff(name_status: str, diff: str) -> str:
         response = client.chat.completions.create(
             model=model,
             temperature=0.2,
+            max_tokens=700,
             messages=[
                 {
                     "role": "system",
@@ -84,10 +87,8 @@ def summarize_diff(name_status: str, diff: str) -> str:
                 {
                     "role": "user",
                     "content": (
-                        "Changed files:\n"
-                        f"```text\n{name_status}\n```\n\n"
-                        "Staged diff:\n"
-                        f"```diff\n{diff}\n```"
+                        "Summarize these staged changes:\n\n"
+                        f"{diff_context}"
                     ),
                 },
             ],
@@ -108,10 +109,21 @@ def main() -> int:
     if not configure_openai_api_key():
         return 1
 
-    name_status = run_git_command(["diff", "--staged", "--name-status"]).strip()
+    diff_context = build_staged_diff_context(
+        diff=staged_diff,
+        name_status=run_git_command(["diff", "--staged", "--name-status"]).strip(),
+        stat=run_git_command(["diff", "--staged", "--stat"]).strip(),
+    )
+
+    if diff_context.truncated:
+        print(
+            "\nShortened staged diff context before calling OpenAI "
+            f"({diff_context.original_diff_chars:,} diff chars -> "
+            f"{diff_context.context_chars:,} prompt chars)."
+        )
 
     try:
-        output = summarize_diff(name_status, staged_diff)
+        output = summarize_diff(diff_context.text)
     except RuntimeError as error:
         print(error)
         return 1

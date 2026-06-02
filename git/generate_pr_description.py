@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from diff_context import build_staged_diff_context
+
 
 DEFAULT_MODEL = "gpt-4o-mini"
 LOCAL_API_KEY_ENV = "OPENAI_API_KEY_git_tools_local"
@@ -56,20 +58,37 @@ def configure_openai_api_key() -> bool:
     return False
 
 
-def collect_pr_context() -> tuple[str, str]:
+def collect_pr_context() -> tuple[str, str, bool, int, int]:
     """Use staged changes first, then fall back to recent commits."""
     staged_diff = run_git_command(["diff", "--staged"]).strip()
     if staged_diff:
-        return "staged diff", staged_diff
+        diff_context = build_staged_diff_context(
+            diff=staged_diff,
+            name_status=run_git_command(["diff", "--staged", "--name-status"]).strip(),
+            stat=run_git_command(["diff", "--staged", "--stat"]).strip(),
+        )
+        return (
+            "staged changes",
+            diff_context.text,
+            diff_context.truncated,
+            diff_context.original_diff_chars,
+            diff_context.context_chars,
+        )
 
     recent_commits = run_git_command(
         ["log", "--oneline", "--decorate", "-n", "10"],
         allow_failure=True,
     ).strip()
     if recent_commits:
-        return "recent commits", recent_commits
+        return (
+            "recent commits",
+            f"Recent commits:\n```text\n{recent_commits}\n```",
+            False,
+            len(recent_commits),
+            len(recent_commits),
+        )
 
-    return "", ""
+    return "", "", False, 0, 0
 
 
 def load_prompt() -> str:
@@ -100,13 +119,14 @@ def generate_pr_description(context_name: str, content: str) -> str:
         response = client.chat.completions.create(
             model=model,
             temperature=0.2,
+            max_tokens=700,
             messages=[
                 {"role": "system", "content": prompt},
                 {
                     "role": "user",
                     "content": (
                         "Create a pull request title and description from this "
-                        f"{context_name}:\n\n```text\n{content}\n```"
+                        f"{context_name}:\n\n{content}"
                     ),
                 },
             ],
@@ -118,7 +138,13 @@ def generate_pr_description(context_name: str, content: str) -> str:
 
 
 def main() -> int:
-    context_name, content = collect_pr_context()
+    (
+        context_name,
+        content,
+        truncated,
+        original_chars,
+        context_chars,
+    ) = collect_pr_context()
 
     if not content:
         print("No staged changes or recent commits found for a pull request summary.")
@@ -126,6 +152,12 @@ def main() -> int:
 
     if not configure_openai_api_key():
         return 1
+
+    if truncated:
+        print(
+            "\nShortened staged diff context before calling OpenAI "
+            f"({original_chars:,} diff chars -> {context_chars:,} prompt chars)."
+        )
 
     try:
         output = generate_pr_description(context_name, content)

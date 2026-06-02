@@ -68,6 +68,16 @@ Optional: set a different OpenAI model with:
 $env:OPENAI_MODEL = "gpt-4o-mini"
 ```
 
+Large staged changes are automatically shortened before they are sent to OpenAI
+so the scripts avoid oversized requests and tokens-per-minute rate limits. The
+file list and diff stats are still included, with representative diff excerpts.
+
+Optional: adjust the maximum staged diff context size with:
+
+```powershell
+$env:GIT_TOOLS_MAX_DIFF_CHARS = "60000"
+```
+
 ## Generate a Commit Message From Any Git Repo
 
 1. Open a terminal in the Git repository where you are making changes.
